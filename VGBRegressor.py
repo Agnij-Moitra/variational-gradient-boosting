@@ -1,4 +1,5 @@
 
+
 import numpy as np
 import pandas as pd
 from numba import prange
@@ -7,9 +8,9 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import RobustScaler, MinMaxScaler
 from sklearn.metrics import mean_absolute_error
 from sklearn.ensemble import RandomForestRegressor, AdaBoostRegressor, GradientBoostingRegressor, HistGradientBoostingRegressor, BaggingRegressor, ExtraTreesRegressor
-from sklearn.svm import SVR, NuSVR
+from sklearn.svm import SVR, NuSVR, LinearSVR
 from sklearn.neural_network import MLPRegressor
-from sklearn.linear_model import LinearRegression, BayesianRidge, ElasticNet, SGDRegressor, LassoLars, Lasso
+from sklearn.linear_model import LinearRegression, BayesianRidge, ElasticNet, SGDRegressor, LassoLars, Lasso, Ridge, ARDRegression, RANSACRegressor, HuberRegressor, TheilSenRegressor
 from sklearn.kernel_ridge import KernelRidge
 from sklearn.tree import DecisionTreeRegressor
 from sklearn.neighbors import KNeighborsRegressor, RadiusNeighborsRegressor
@@ -43,10 +44,12 @@ class VGBRegressor(object):
             if complexity:
                 self._models = (DecisionTreeRegressor, LinearRegression, BayesianRidge, KNeighborsRegressor, ExtraTreesRegressor,
                                 RadiusNeighborsRegressor, ElasticNet, LassoLars, Lasso, RandomForestRegressor, AdaBoostRegressor, GradientBoostingRegressor, HistGradientBoostingRegressor,
-                                BaggingRegressor, SVR, NuSVR, XGBRegressor, XGBRFRegressor, SGDRegressor, KernelRidge, MLPRegressor)
+                                BaggingRegressor, SVR, NuSVR, XGBRegressor, XGBRFRegressor, SGDRegressor, KernelRidge, MLPRegressor,
+                                Ridge, ARDRegression, RANSACRegressor, HuberRegressor, TheilSenRegressor)
             else:
                 self._models = (DecisionTreeRegressor, LinearRegression, BayesianRidge, KNeighborsRegressor,
-                                RadiusNeighborsRegressor, ElasticNet, LassoLars, Lasso, SGDRegressor, BaggingRegressor)
+                                RadiusNeighborsRegressor, ElasticNet, LassoLars, Lasso, SGDRegressor, BaggingRegressor,
+                                Ridge, ARDRegression, RANSACRegressor, HuberRegressor, TheilSenRegressor)
         self._ensemble = []
 
     def _metrics(self, vt, vp, model, time=None):
@@ -59,7 +62,6 @@ class VGBRegressor(object):
             ('scaler1', RobustScaler()),
             ('model', model_name())
         ])
-        model_name()
         if time_it:
             begin = time.time()
             model.fit(X, y)
@@ -87,6 +89,8 @@ class VGBRegressor(object):
         # base model: mean
         # computer residuals: y - y hat
         # for n_estimators: a) y = prev residuals && residuals * learning rate
+        # add early stopping
+        # restore best weights
         # ada boost and adaptive scaling for learning rates
 
         preds = pd.DataFrame(
@@ -100,9 +104,10 @@ class VGBRegressor(object):
             min_loss = min(results, key=lambda d: d.get(
                 "loss", float('inf')))["loss"]  # https://stackoverflow.com/a/19619294
             min_model = [i['model']
-                         for i in results if min_loss == i['loss']][0]
+                         for i in results if min_loss >= i['loss']][0]
             residuals[f'r{i}'] = min_model.predict(
                 X_train) * self.learning_rate
+            # return results, min_model
             X_train[f'r{i}'] = residuals[f'r{i - 1}']
             self._ensemble.append(min_model)
         return self._ensemble, residuals
