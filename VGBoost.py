@@ -43,11 +43,14 @@ class VGBRegressor(object):
         return (model.fit(X, y), None)
 
     def _get_metrics(self, model_name):
-        Xt, Xv, yt, yv = train_test_split(self._X, self._y)
-        results = self._create_model(Xt, yt, model_name, time_it=False)
-        model, time = results[0], results[1]
-        return self._metrics(yv,
-                             model.predict(Xv), model, time)
+        try:
+            Xt, Xv, yt, yv = train_test_split(self._X, self._y)
+            results = self._create_model(Xt, yt, model_name, time_it=False)
+            model, time = results[0], results[1]
+            return self._metrics(yv,
+                                 model.predict(Xv), model, time)
+        except Exception:
+            return None
 
     def _get_results(self, X, y) -> list:
         results = []
