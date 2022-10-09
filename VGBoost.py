@@ -1,9 +1,9 @@
-import numpy as np
-import pandas as pd
+from numpy import full
+from pandas import DataFrame, concat
 from numba import prange
 from concurrent.futures import ThreadPoolExecutor
+# Scikit-learn: Machine Learning in Python, Pedregosa et al., JMLR 12, pp. 2825-2830, 2011
 from sklearn.model_selection import train_test_split
-from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import RobustScaler, MinMaxScaler
 from sklearn.metrics import mean_squared_error
 from sklearn.ensemble import GradientBoostingRegressor, HistGradientBoostingRegressor, BaggingRegressor, ExtraTreesRegressor
@@ -13,7 +13,7 @@ from sklearn.linear_model import LinearRegression, BayesianRidge, ElasticNet, SG
 from sklearn.kernel_ridge import KernelRidge
 from sklearn.tree import DecisionTreeRegressor
 from sklearn.neighbors import KNeighborsRegressor
-from xgboost import XGBRegressor, XGBRFRegressor
+from xgboost import XGBRegressor
 from sklearn.impute import KNNImputer
 from time import perf_counter
 from copy import deepcopy
@@ -100,7 +100,7 @@ class VGBRegressor(object):
             if complexity:
                 self._models = (DecisionTreeRegressor, LinearRegression, BayesianRidge, KNeighborsRegressor,
                                 ElasticNet, LassoLars, Lasso, GradientBoostingRegressor, HistGradientBoostingRegressor, ExtraTreesRegressor,
-                                BaggingRegressor, NuSVR, XGBRegressor, XGBRFRegressor, SGDRegressor, KernelRidge, MLPRegressor,
+                                BaggingRegressor, NuSVR, XGBRegressor, SGDRegressor, KernelRidge, MLPRegressor,
                                 Ridge, ARDRegression, RANSACRegressor, HuberRegressor, TheilSenRegressor, LassoLarsIC)
             else:
                 self._models = (DecisionTreeRegressor, LinearRegression, BayesianRidge, KNeighborsRegressor,
@@ -114,9 +114,9 @@ class VGBRegressor(object):
         # restore best weights
         # ada boost and adaptive scaling for learning rates
 
-        preds = pd.DataFrame(
-            data={'yt': y_train, 'p0': np.full((len(y_train)), y_train.mean(skipna=True))})
-        residuals = pd.DataFrame(
+        preds = DataFrame(
+            data={'yt': y_train, 'p0': full((len(y_train)), y_train.mean(skipna=True))})
+        residuals = DataFrame(
             data={'r0': y_train - y_train.mean(skipna=True)})
         errors = []
         if not early_stopping:
@@ -137,7 +137,7 @@ class VGBRegressor(object):
                         errors.append(mean_squared_error(
                             preds['yt'], preds[f'p{i}']))
                     except Exception:
-                        df = pd.concat(
+                        df = concat(
                             [preds['yt'], preds[f'p{i - 1}']], axis=1).dropna()
                         errors.append(mean_squared_error(
                             df['yt'], df[f"p{i - 1}"]))
