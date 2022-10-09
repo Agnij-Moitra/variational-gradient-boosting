@@ -118,7 +118,7 @@ class VGBRegressor(object):
         # ada boost and adaptive scaling for learning rates
 
         preds = DataFrame(
-            data={'yt': y_train, 'p0': full((len(y_train)), y_train.mean(skipna=True))})
+            data={'yt': y_train, 'p0': full((len(y_train)), y_train.mean())})
         residuals = DataFrame(
             data={'r0': y_train - y_train.mean(skipna=True)})
         errors = []
