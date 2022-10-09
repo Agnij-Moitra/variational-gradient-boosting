@@ -9,7 +9,7 @@ from sklearn.metrics import mean_squared_error
 from sklearn.ensemble import GradientBoostingRegressor, HistGradientBoostingRegressor, BaggingRegressor, ExtraTreesRegressor
 from sklearn.svm import NuSVR
 from sklearn.neural_network import MLPRegressor
-from sklearn.linear_model import LinearRegression, BayesianRidge, ElasticNet, SGDRegressor, LassoLars, Lasso, Ridge, ARDRegression, RANSACRegressor, HuberRegressor, TheilSenRegressor
+from sklearn.linear_model import LinearRegression, BayesianRidge, ElasticNet, SGDRegressor, LassoLars, Lasso, Ridge, ARDRegression, RANSACRegressor, HuberRegressor, TheilSenRegressor, LassoLarsIC
 from sklearn.kernel_ridge import KernelRidge
 from sklearn.tree import DecisionTreeRegressor
 from sklearn.neighbors import KNeighborsRegressor
@@ -98,14 +98,14 @@ class VGBRegressor(object):
             self._models = custom_models
         else:
             if complexity:
-                self._models = (DecisionTreeRegressor, LinearRegression, BayesianRidge, KNeighborsRegressor, ExtraTreesRegressor,
-                                ElasticNet, LassoLars, Lasso, GradientBoostingRegressor, HistGradientBoostingRegressor,
+                self._models = (DecisionTreeRegressor, LinearRegression, BayesianRidge, KNeighborsRegressor,
+                                ElasticNet, LassoLars, Lasso, GradientBoostingRegressor, HistGradientBoostingRegressor, ExtraTreesRegressor,
                                 BaggingRegressor, NuSVR, XGBRegressor, XGBRFRegressor, SGDRegressor, KernelRidge, MLPRegressor,
-                                Ridge, ARDRegression, RANSACRegressor, HuberRegressor, TheilSenRegressor)
+                                Ridge, ARDRegression, RANSACRegressor, HuberRegressor, TheilSenRegressor, LassoLarsIC)
             else:
                 self._models = (DecisionTreeRegressor, LinearRegression, BayesianRidge, KNeighborsRegressor,
                                 ElasticNet, LassoLars, Lasso, SGDRegressor, BaggingRegressor,
-                                Ridge, ARDRegression, RANSACRegressor,)
+                                Ridge, ARDRegression, RANSACRegressor, LassoLarsIC)
         X_train = deepcopy(X_train)
         # base model: mean
         # computer residuals: y - y hat
