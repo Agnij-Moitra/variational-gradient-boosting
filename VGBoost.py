@@ -1,3 +1,4 @@
+# from VGBoost import VGBRegressor
 from numpy import full
 from pandas import DataFrame, concat
 from numba import prange
@@ -5,7 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 # Scikit-learn: Machine Learning in Python, Pedregosa et al., JMLR 12, pp. 2825-2830, 2011
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import RobustScaler, MinMaxScaler
-from sklearn.metrics import mean_squared_error
+from sklearn.metrics import mean_squared_error, r2_score
 from sklearn.ensemble import GradientBoostingRegressor, HistGradientBoostingRegressor, BaggingRegressor, ExtraTreesRegressor
 from sklearn.svm import NuSVR
 from sklearn.neural_network import MLPRegressor
@@ -49,11 +50,11 @@ class VGBRegressor(object):
 
     def _get_results(self, X, y) -> list:
         results = []
-        try:
-            self._X = MinMaxScaler().fit_transform(RobustScaler().fit_transform(X))
-        except Exception:
-            self._X = MinMaxScaler().fit_transform(RobustScaler().fit_transform(
-                KNNImputer(weights='distance').fit_transform(X)))
+        self._minimax = MinMaxScaler()
+        self._robust = RobustScaler()
+        # self._X = self._minimax.fit_transform(self._robust.fit_transform(
+        #         KNNImputer(weights='distance').fit_transform(X)))
+        self._X = X
         self._y = y
         with ThreadPoolExecutor(max_workers=len(self._models)) as executor:
             res = executor.map(self._get_metrics, self._models)
@@ -67,7 +68,7 @@ class VGBRegressor(object):
         early_stopping_patience: int = 10,
         custom_models: list = None,
         learning_rate: float = 0.05,
-        n_estimators: int = 30,
+        n_estimators: int = 100,
         warm_start: bool = False,
         complexity: bool = False,
         custom_loss_metrics: object = False,
@@ -90,9 +91,10 @@ class VGBRegressor(object):
                                 Ridge, ARDRegression, RANSACRegressor, HuberRegressor, TheilSenRegressor, LassoLarsIC)
             else:
                 self._models = (DecisionTreeRegressor, LinearRegression, BayesianRidge, KNeighborsRegressor,
-                                ElasticNet, LassoLars, Lasso, SGDRegressor, BaggingRegressor,
+                                ElasticNet, LassoLars, Lasso, SGDRegressor, BaggingRegressor, ExtraTreesRegressor,
                                 Ridge, ARDRegression, RANSACRegressor, LassoLarsIC)
         X_train = deepcopy(X_train)
+        self._y_mean = y_train.mean()
         # base model: mean
         # computer residuals: y - y hat
         # for n_estimators: a) y = prev residuals && residuals * learning rate
@@ -101,9 +103,9 @@ class VGBRegressor(object):
         # ada boost and adaptive scaling for learning rates
 
         preds = DataFrame(
-            data={'yt': y_train, 'p0': full((len(y_train)), y_train.mean())})
+            data={'yt': y_train, 'p0': full((len(y_train)), y_train - self._y_mean)})
         residuals = DataFrame(
-            data={'r0': y_train - y_train.mean(skipna=True)})
+            data={'r0': y_train - self._y_mean})
         errors = []
         if not early_stopping:
             if warm_start:
@@ -128,8 +130,6 @@ class VGBRegressor(object):
                         errors.append(mean_squared_error(
                             df['yt'], df[f"p{i - 1}"]))
                     self._ensemble.append(min_model)
-                    if errors[i - 1] == 0:
-                        break
             else:
                 for i in prange(1, self.n_estimators + 1):
                     y = residuals[f'r{i - 1}']
@@ -155,3 +155,19 @@ class VGBRegressor(object):
                                                 min_error_i], errors[:min_error_i]
         residuals = residuals[:len(errors)]
         return self._ensemble, (residuals, errors)
+
+    def predict(self, X_test):
+        try:
+            val = self._ensemble[0]
+        except Exception:
+            return "Please train the model first"
+        # X_test = self._robust.transform(self._minimax.transform(deepcopy(X_test)))
+        preds = DataFrame(
+            data={'p0': full((len(X_test)), self._y_mean)})
+        for i in prange(len(self._ensemble)):
+            preds[f"p{i}"] = self._ensemble[i].predict(X_test)
+        preds_ = preds.sum(axis=1)
+        return preds_
+
+    def score(self, X_test, y_true):
+        return r2_score(y_true, self.predict(X_test))
