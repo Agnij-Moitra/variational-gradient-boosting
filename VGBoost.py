@@ -29,11 +29,6 @@ class VGBRegressor(object):
         return {"model": model, "time": time, "loss": mean_squared_error(vt, vp)}
 
     def _create_model(self, X, y, model_name, time_it: bool = False):
-        # model = Pipeline([
-        #     ('scaler1', RobustScaler()),
-        #     ('scaler2', MinMaxScaler()),
-        #     ('model', model_name())
-        # ])
         model = model_name()
         if time_it:
             begin = perf_counter()
@@ -55,26 +50,14 @@ class VGBRegressor(object):
     def _get_results(self, X, y) -> list:
         results = []
         try:
-            self._X = MinMaxScaler().fit_transform(
-                RobustScaler().fit_transform(X)
-            )
+            self._X = MinMaxScaler().fit_transform(RobustScaler().fit_transform(X))
         except Exception:
-            self._X = MinMaxScaler().fit_transform(
-                RobustScaler().fit_transform(
-                    KNNImputer(weights='distance').fit_transform(X)
-                )
-            )
+            self._X = MinMaxScaler().fit_transform(RobustScaler().fit_transform(
+                KNNImputer(weights='distance').fit_transform(X)))
         self._y = y
         with ThreadPoolExecutor(max_workers=len(self._models)) as executor:
             res = executor.map(self._get_metrics, self._models)
-            # for i in
             results = [i for i in res if i]
-        return results
-        for i in self._models:
-            try:
-                results.append(self._get_metrics(X, y, i))
-            except Exception:
-                pass
         return results
 
     def fit(
@@ -145,6 +128,8 @@ class VGBRegressor(object):
                         errors.append(mean_squared_error(
                             df['yt'], df[f"p{i - 1}"]))
                     self._ensemble.append(min_model)
+                    if errors[i - 1] == 0:
+                        break
             else:
                 for i in prange(1, self.n_estimators + 1):
                     y = residuals[f'r{i - 1}']
@@ -159,6 +144,8 @@ class VGBRegressor(object):
                     errors.append(mean_squared_error(
                         preds['yt'], preds[f'p{i}']))
                     self._ensemble.append(min_model)
+                    if errors[i - 1] == 0:
+                        break
         else:
             return "TODO"
         min_error = min(errors)
