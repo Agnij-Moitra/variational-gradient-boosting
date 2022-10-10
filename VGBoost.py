@@ -1,4 +1,3 @@
-# from VGBoost import VGBRegressor
 from numpy import full
 from pandas import DataFrame, concat
 from numba import prange
@@ -21,15 +20,44 @@ from copy import deepcopy
 
 
 class VGBRegressor(object):
+    """_summary_
+
+    Args:
+        object (_type_): _description_
+    """
     def __init__(self):
+        """ Initialize VGBRegressor Object
+        """
         self._ensemble = []
 
     def _metrics(self, vt, vp, model, time=None):
+        """_summary_
+
+        Args:
+            vt (_type_): _description_
+            vp (_type_): _description_
+            model (_type_): _description_
+            time (_type_, optional): _description_. Defaults to None.
+
+        Returns:
+            _type_: _description_
+        """
         if self.custom_loss_metrics:
             return {'model': model, 'time': time, 'loss': self.custom_loss_metrics(vt, vp)}
         return {"model": model, "time": time, "loss": mean_squared_error(vt, vp)}
 
     def _create_model(self, X, y, model_name, time_it: bool = False):
+        """_summary_
+
+        Args:
+            X (_type_): _description_
+            y (_type_): _description_
+            model_name (_type_): _description_
+            time_it (bool, optional): _description_. Defaults to False.
+
+        Returns:
+            _type_: _description_
+        """
         model = model_name()
         if time_it:
             begin = perf_counter()
@@ -39,6 +67,14 @@ class VGBRegressor(object):
         return (model.fit(X, y), None)
 
     def _get_metrics(self, model_name):
+        """_summary_
+
+        Args:
+            model_name (_type_): _description_
+
+        Returns:
+            _type_: _description_
+        """
         try:
             Xt, Xv, yt, yv = train_test_split(self._X, self._y)
             results = self._create_model(Xt, yt, model_name, time_it=False)
@@ -49,6 +85,15 @@ class VGBRegressor(object):
             return None
 
     def _get_results(self, X, y) -> list:
+        """_summary_
+
+        Args:
+            X (_type_): _description_
+            y (_type_): _description_
+
+        Returns:
+            list: _description_
+        """
         results = []
         self._minimax = MinMaxScaler()
         self._robust = RobustScaler()
@@ -73,6 +118,24 @@ class VGBRegressor(object):
         complexity: bool = False,
         custom_loss_metrics: object = False,
     ):
+        """_summary_
+
+        Args:
+            X_train (_type_): _description_
+            y_train (_type_): _description_
+            early_stopping (bool, optional): _description_. Defaults to False.
+            early_stopping_min_delta (float, optional): _description_. Defaults to 0.001.
+            early_stopping_patience (int, optional): _description_. Defaults to 10.
+            custom_models (list, optional): _description_. Defaults to None.
+            learning_rate (float, optional): _description_. Defaults to 0.05.
+            n_estimators (int, optional): _description_. Defaults to 100.
+            warm_start (bool, optional): _description_. Defaults to False.
+            complexity (bool, optional): _description_. Defaults to False.
+            custom_loss_metrics (object, optional): _description_. Defaults to False.
+
+        Returns:
+            _type_: _description_
+        """
         if custom_models:
             self._models = custom_models
         self.custom_loss_metrics = custom_loss_metrics
@@ -85,8 +148,8 @@ class VGBRegressor(object):
             self._models = custom_models
         else:
             if complexity:
-                self._models = (DecisionTreeRegressor, LinearRegression, BayesianRidge, KNeighborsRegressor,
-                                ElasticNet, LassoLars, Lasso, GradientBoostingRegressor, HistGradientBoostingRegressor, ExtraTreesRegressor,
+                self._models = (DecisionTreeRegressor, LinearRegression, BayesianRidge, KNeighborsRegressor, HistGradientBoostingRegressor,
+                                ElasticNet, LassoLars, Lasso, GradientBoostingRegressor, ExtraTreesRegressor,
                                 BaggingRegressor, NuSVR, XGBRegressor, SGDRegressor, KernelRidge, MLPRegressor,
                                 Ridge, ARDRegression, RANSACRegressor, HuberRegressor, TheilSenRegressor, LassoLarsIC)
             else:
@@ -155,10 +218,17 @@ class VGBRegressor(object):
                                                 min_error_i], errors[:min_error_i]
         residuals = residuals[:len(errors)]
         return self._ensemble, (residuals, errors)
-
+    
     def predict(self, X_test):
-        try:
-            val = self._ensemble[0]
+        """_summary_
+
+        Args:
+            X_test (_type_): _description_
+
+        Returns:
+            _type_: _description_
+        """
+        try: val = self._ensemble[0]
         except Exception:
             return "Please train the model first"
         # X_test = self._robust.transform(self._minimax.transform(deepcopy(X_test)))
@@ -168,6 +238,14 @@ class VGBRegressor(object):
             preds[f"p{i}"] = self._ensemble[i].predict(X_test)
         preds_ = preds.sum(axis=1)
         return preds_
-
+    
     def score(self, X_test, y_true):
+        """
+        Args:
+            X_test (Iterable)
+            y_true (Iterable)
+
+        Returns:
+            float: R2 Score for y_true and y_predicted
+        """
         return r2_score(y_true, self.predict(X_test))
