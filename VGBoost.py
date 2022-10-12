@@ -9,6 +9,7 @@ from sklearn.metrics import mean_squared_error, r2_score
 from sklearn.ensemble import GradientBoostingRegressor, HistGradientBoostingRegressor, BaggingRegressor, ExtraTreesRegressor
 from sklearn.svm import NuSVR
 from sklearn.neural_network import MLPRegressor
+from lightgbm import LGBMRegressor
 from sklearn.linear_model import LinearRegression, BayesianRidge, ElasticNet, SGDRegressor, LassoLars, Lasso, Ridge, ARDRegression, RANSACRegressor, HuberRegressor, TheilSenRegressor, LassoLarsIC
 from sklearn.kernel_ridge import KernelRidge
 from sklearn.tree import DecisionTreeRegressor
@@ -25,6 +26,7 @@ class VGBRegressor(object):
     Args:
         object (_type_): _description_
     """
+
     def __init__(self):
         """ Initialize VGBRegressor Object
         """
@@ -95,8 +97,6 @@ class VGBRegressor(object):
             list: _description_
         """
         results = []
-        self._minimax = MinMaxScaler()
-        self._robust = RobustScaler()
         # self._X = self._minimax.fit_transform(self._robust.fit_transform(
         #         KNNImputer(weights='distance').fit_transform(X)))
         self._X = X
@@ -153,10 +153,11 @@ class VGBRegressor(object):
                                 BaggingRegressor, NuSVR, XGBRegressor, SGDRegressor, KernelRidge, MLPRegressor,
                                 Ridge, ARDRegression, RANSACRegressor, HuberRegressor, TheilSenRegressor, LassoLarsIC)
             else:
-                self._models = (DecisionTreeRegressor, LinearRegression, BayesianRidge, KNeighborsRegressor,
+                self._models = (DecisionTreeRegressor, LinearRegression, BayesianRidge, KNeighborsRegressor, LGBMRegressor.
                                 ElasticNet, LassoLars, Lasso, SGDRegressor, BaggingRegressor, ExtraTreesRegressor,
                                 Ridge, ARDRegression, RANSACRegressor, LassoLarsIC)
-        X_train = deepcopy(X_train)
+        X_train = KNNImputer(weights='distance',
+                             n_neighbors=10).fit_transform(deepcopy(X_train))
         self._y_mean = y_train.mean()
         # base model: mean
         # computer residuals: y - y hat
@@ -218,7 +219,7 @@ class VGBRegressor(object):
                                                 min_error_i], errors[:min_error_i]
         residuals = residuals[:len(errors)]
         return self._ensemble, (residuals, errors)
-    
+
     def predict(self, X_test):
         """_summary_
 
@@ -228,7 +229,8 @@ class VGBRegressor(object):
         Returns:
             _type_: _description_
         """
-        try: val = self._ensemble[0]
+        try:
+            val = self._ensemble[0]
         except Exception:
             return "Please train the model first"
         # X_test = self._robust.transform(self._minimax.transform(deepcopy(X_test)))
@@ -238,7 +240,7 @@ class VGBRegressor(object):
             preds[f"p{i}"] = self._ensemble[i].predict(X_test)
         preds_ = preds.sum(axis=1)
         return preds_
-    
+
     def score(self, X_test, y_true):
         """
         Args:
