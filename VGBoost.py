@@ -156,7 +156,7 @@ class VGBRegressor(BaseEstimator):
                                 BaggingRegressor, NuSVR, XGBRegressor, SGDRegressor, KernelRidge, MLPRegressor, LGBMRegressor,
                                 Ridge, ARDRegression, RANSACRegressor, HuberRegressor, TheilSenRegressor, LassoLarsIC)
             elif light:
-                self._models = (LGBMRegressor, ExtraTreeRegressor,
+                self._models = (LGBMRegressor, ExtraTreesRegressor,
                                 BaggingRegressor, RANSACRegressor, LassoLarsIC, BayesianRidge)
             else:
                 self._models = (DecisionTreeRegressor, LinearRegression, BayesianRidge, KNeighborsRegressor, LGBMRegressor,
@@ -396,7 +396,7 @@ class VGBClassifier(BaseEstimator):
                                 BaggingRegressor, NuSVR, XGBRegressor, SGDRegressor, KernelRidge, MLPRegressor, LGBMRegressor,
                                 Ridge, ARDRegression, RANSACRegressor, HuberRegressor, TheilSenRegressor, LassoLarsIC)
             elif light:
-                self._models = (LGBMRegressor, ExtraTreeRegressor,
+                self._models = (LGBMRegressor, ExtraTreesRegressor,
                                 BaggingRegressor, RANSACRegressor, LassoLarsIC, BayesianRidge)
             else:
                 self._models = (DecisionTreeRegressor, LinearRegression, BayesianRidge, KNeighborsRegressor, LGBMRegressor,
