@@ -148,6 +148,7 @@ class VGBRegressor(BaseEstimator):
         self.early_stopping_min_delta = early_stopping_min_delta
         self.early_stopping_patience = early_stopping_patience
         if custom_models:
+            
             self._models = custom_models
         else:
             if complexity:
