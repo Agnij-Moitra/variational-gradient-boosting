@@ -24,7 +24,6 @@ from copy import deepcopy
 
 class VGBRegressor(BaseEstimator):
     """_summary_
-
     Args:
         object (_type_): _description_
     """
@@ -36,13 +35,11 @@ class VGBRegressor(BaseEstimator):
 
     def _metrics(self, vt, vp, model, time=None):
         """_summary_
-
         Args:
             vt (_type_): _description_
             vp (_type_): _description_
             model (_type_): _description_
             time (_type_, optional): _description_. Defaults to None.
-
         Returns:
             _type_: _description_
         """
@@ -52,13 +49,11 @@ class VGBRegressor(BaseEstimator):
 
     def _create_model(self, X, y, model_name, time_it: bool = False):
         """_summary_
-
         Args:
             X (_type_): _description_
             y (_type_): _description_
             model_name (_type_): _description_
             time_it (bool, optional): _description_. Defaults to False.
-
         Returns:
             _type_: _description_
         """
@@ -72,10 +67,8 @@ class VGBRegressor(BaseEstimator):
 
     def _get_metrics(self, model_name):
         """_summary_
-
         Args:
             model_name (_type_): _description_
-
         Returns:
             _type_: _description_
         """
@@ -90,11 +83,9 @@ class VGBRegressor(BaseEstimator):
 
     def _get_results(self, X, y) -> list:
         """_summary_
-
         Args:
             X (_type_): _description_
             y (_type_): _description_
-
         Returns:
             list: _description_
         """
@@ -122,7 +113,6 @@ class VGBRegressor(BaseEstimator):
         custom_loss_metrics: object = False,
     ):
         """_summary_
-
         Args:
             X_train (_type_): _description_
             y_train (_type_): _description_
@@ -135,7 +125,6 @@ class VGBRegressor(BaseEstimator):
             warm_start (bool, optional): _description_. Defaults to False.
             complexity (bool, optional): _description_. Defaults to False.
             custom_loss_metrics (object, optional): _description_. Defaults to False.
-
         Returns:
             _type_: _description_
         """
@@ -229,10 +218,8 @@ class VGBRegressor(BaseEstimator):
 
     def predict(self, X_test):
         """_summary_
-
         Args:
             X_test (_type_): _description_
-
         Returns:
             _type_: _description_
         """
@@ -253,7 +240,6 @@ class VGBRegressor(BaseEstimator):
         Args:
             X_test (Iterable)
             y_true (Iterable)
-
         Returns:
             float: R2 Score for y_true and y_predicted
         """
@@ -265,7 +251,6 @@ class VGBRegressor(BaseEstimator):
 
 class VGBClassifier(BaseEstimator):
     """_summary_
-
     Args:
         object (_type_): _description_
     """
@@ -277,13 +262,11 @@ class VGBClassifier(BaseEstimator):
 
     def _metrics(self, vt, vp, model, time=None):
         """_summary_
-
         Args:
             vt (_type_): _description_
             vp (_type_): _description_
             model (_type_): _description_
             time (_type_, optional): _description_. Defaults to None.
-
         Returns:
             _type_: _description_
         """
@@ -293,13 +276,11 @@ class VGBClassifier(BaseEstimator):
 
     def _create_model(self, X, y, model_name, time_it: bool = False):
         """_summary_
-
         Args:
             X (_type_): _description_
             y (_type_): _description_
             model_name (_type_): _description_
             time_it (bool, optional): _description_. Defaults to False.
-
         Returns:
             _type_: _description_
         """
@@ -313,10 +294,8 @@ class VGBClassifier(BaseEstimator):
 
     def _get_metrics(self, model_name):
         """_summary_
-
         Args:
             model_name (_type_): _description_
-
         Returns:
             _type_: _description_
         """
@@ -331,11 +310,9 @@ class VGBClassifier(BaseEstimator):
 
     def _get_results(self, X, y) -> list:
         """_summary_
-
         Args:
             X (_type_): _description_
             y (_type_): _description_
-
         Returns:
             list: _description_
         """
@@ -363,7 +340,6 @@ class VGBClassifier(BaseEstimator):
         custom_loss_metrics: object = False,
     ):
         """_summary_
-
         Args:
             X_train (_type_): _description_
             y_train (_type_): _description_
@@ -376,7 +352,6 @@ class VGBClassifier(BaseEstimator):
             warm_start (bool, optional): _description_. Defaults to False.
             complexity (bool, optional): _description_. Defaults to False.
             custom_loss_metrics (object, optional): _description_. Defaults to False.
-
         Returns:
             _type_: _description_
         """
@@ -469,10 +444,8 @@ class VGBClassifier(BaseEstimator):
 
     def predict(self, X_test):
         """_summary_
-
         Args:
             X_test (_type_): _description_
-
         Returns:
             _type_: _description_
         """
@@ -498,7 +471,6 @@ class VGBClassifier(BaseEstimator):
         Args:
             X_test (Iterable)
             y_true (Iterable)
-
         Returns:
             float: R2 Score for y_true and y_predicted
         """
