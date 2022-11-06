@@ -1,4 +1,5 @@
 import numpy as np
+from collections import Counter
 from pandas import DataFrame, concat
 from numba import prange
 from concurrent.futures import ThreadPoolExecutor
@@ -18,44 +19,47 @@ from sklearn.neighbors import KNeighborsRegressor
 from xgboost import XGBRegressor
 from sklearn.impute import KNNImputer
 from time import perf_counter
-import collections.abc
+from random import sample
 from copy import deepcopy
 
 
 class VGBRegressor(BaseEstimator):
-    """_summary_
-    Args:
-        object (_type_): _description_
+    """A Variational Gradient Boosting Regressor
     """
 
     def __init__(self):
         """ Initialize VGBRegressor Object
         """
+        super().__init__()
         self._ensemble = []
 
     def _metrics(self, vt, vp, model, time=None):
-        """_summary_
+        """get loss metrics of a model
+
         Args:
-            vt (_type_): _description_
-            vp (_type_): _description_
-            model (_type_): _description_
-            time (_type_, optional): _description_. Defaults to None.
+            vt (iterable): validation true values
+            vp (iterable): validation pred values
+            model (object): any model with fit and predict method
+            time (float, optional): execution time of the model. Defaults to None.
+
         Returns:
-            _type_: _description_
+            dict['model', 'time', 'loss']
         """
         if self.custom_loss_metrics:
             return {'model': model, 'time': time, 'loss': self.custom_loss_metrics(vt, vp)}
         return {"model": model, "time": time, "loss": mean_squared_error(vt, vp)}
 
     def _create_model(self, X, y, model_name, time_it: bool = False):
-        """_summary_
+        """fit a model instance
+
         Args:
-            X (_type_): _description_
-            y (_type_): _description_
-            model_name (_type_): _description_
-            time_it (bool, optional): _description_. Defaults to False.
+            X (iterable)
+            y (iterable)
+            model_name (object): any model object with fit and predict methods
+            time_it (bool, optional): measure execution time. Defaults to False.
+
         Returns:
-            _type_: _description_
+            tuple(model, time=None)
         """
         model = model_name()
         if time_it:
@@ -66,11 +70,13 @@ class VGBRegressor(BaseEstimator):
         return (model.fit(X, y), None)
 
     def _get_metrics(self, model_name):
-        """_summary_
+        """a helper fuction, combines self._create_model and self._metrics
+
         Args:
-            model_name (_type_): _description_
+            model_name (object): any model with fit and predict methods
+
         Returns:
-            _type_: _description_
+            self._metrics
         """
         try:
             Xt, Xv, yt, yv = train_test_split(self._X, self._y)
@@ -82,12 +88,14 @@ class VGBRegressor(BaseEstimator):
             return None
 
     def _get_results(self, X, y) -> list:
-        """_summary_
+        """Use multi-threading to return all results
+
         Args:
-            X (_type_): _description_
-            y (_type_): _description_
+            X (iterable)
+            y (iterable)
+
         Returns:
-            list: _description_
+            list[dict['model', 'time', 'loss']]
         """
         results = []
         # self._X = self._minimax.fit_transform(self._robust.fit_transform(
@@ -111,22 +119,38 @@ class VGBRegressor(BaseEstimator):
         complexity: bool = False,
         light: bool = True,
         custom_loss_metrics: object = False,
+        freeze_models: bool = False,
+        n_models: int = 5,
+        n_iter_models: int = 5,
+        n_warm: int = None,
+        n_random_models: int = 0,
+        return_vals: bool = True,
     ):
-        """_summary_
+        """fit VGBoost model
+
         Args:
-            X_train (_type_): _description_
-            y_train (_type_): _description_
-            early_stopping (bool, optional): _description_. Defaults to False.
-            early_stopping_min_delta (float, optional): _description_. Defaults to 0.001.
-            early_stopping_patience (int, optional): _description_. Defaults to 10.
-            custom_models (list, optional): _description_. Defaults to None.
-            learning_rate (float, optional): _description_. Defaults to 0.05.
-            n_estimators (int, optional): _description_. Defaults to 100.
-            warm_start (bool, optional): _description_. Defaults to False.
-            complexity (bool, optional): _description_. Defaults to False.
+            X_train (iterable)
+            y_train (iterbale)
+            early_stopping (bool, optional): Defaults to False.
+            early_stopping_min_delta (float, optional): Defaults to 0.001.
+            early_stopping_patience (int, optional): Defaults to 10.
+            custom_models (tuple, optional): tuple of custom models with fit and predict methods. Defaults to None.
+            learning_rate (float, optional): Defaults to 0.05.
+            n_estimators (int, optional): Defaults to 100.
+            warm_start (bool, optional): Defaults to False.
+            complexity (bool, optional): trains more models but has greater time complexity. Defaults to False.
+            light (bool, optional): trains less models. Defaults to True.
             custom_loss_metrics (object, optional): _description_. Defaults to False.
+            freeze_models (bool, optional): test only a selected models. Defaults to False.
+            n_models (int, optional): Applicable for freeze_models, number of models to train. Defaults to 5.
+            n_iter_models (int, optional): Applicable for freeze_models, number of iterations before finalizing the models. Defaults to 5.
+            n_warm (int, optional): Applicable for warm start, number of iterarions to store. Defaults to None.
+            n_random_models (int, optional): train on a random number of models. Defaults to 0.
+            return_vals (bool, optional): returns analytics. Defaults to True.
+
         Returns:
-            _type_: _description_
+            tuple[final ensemble sequence, mean absolute error of each layer, residual value of each layer],
+            None
         """
         if custom_models:
             self._models = custom_models
@@ -137,21 +161,26 @@ class VGBRegressor(BaseEstimator):
         self.early_stopping_min_delta = early_stopping_min_delta
         self.early_stopping_patience = early_stopping_patience
         if custom_models:
-            
-            self._models = custom_models
+
+            self._models_lst = custom_models
         else:
             if complexity:
-                self._models = (DecisionTreeRegressor, LinearRegression, BayesianRidge, KNeighborsRegressor, HistGradientBoostingRegressor,
-                                ElasticNet, LassoLars, Lasso, GradientBoostingRegressor, ExtraTreesRegressor,
-                                BaggingRegressor, NuSVR, XGBRegressor, SGDRegressor, KernelRidge, MLPRegressor, LGBMRegressor,
-                                Ridge, ARDRegression, RANSACRegressor, HuberRegressor, TheilSenRegressor, LassoLarsIC)
+                self._models_lst = (DecisionTreeRegressor, LinearRegression, BayesianRidge, KNeighborsRegressor, HistGradientBoostingRegressor,
+                                    ElasticNet, LassoLars, Lasso, GradientBoostingRegressor, ExtraTreesRegressor, SVC,
+                                    BaggingRegressor, NuSVR, XGBRegressor, SGDRegressor, KernelRidge, MLPRegressor, LGBMRegressor,
+                                    Ridge, ARDRegression, RANSACRegressor, HuberRegressor, TheilSenRegressor, LassoLarsIC)
             elif light:
-                self._models = (LGBMRegressor, ExtraTreesRegressor,
-                                BaggingRegressor, RANSACRegressor, LassoLarsIC, BayesianRidge)
+                self._models_lst = (LGBMRegressor, ExtraTreesRegressor,
+                                    BaggingRegressor, RANSACRegressor, LassoLarsIC, BayesianRidge)
             else:
-                self._models = (DecisionTreeRegressor, LinearRegression, BayesianRidge, KNeighborsRegressor, LGBMRegressor,
-                                ElasticNet, LassoLars, Lasso, SGDRegressor, BaggingRegressor, ExtraTreesRegressor,
-                                Ridge, ARDRegression, RANSACRegressor, LassoLarsIC)
+                self._models_lst = (DecisionTreeRegressor, LinearRegression, BayesianRidge, KNeighborsRegressor, LGBMRegressor,
+                                    ElasticNet, LassoLars, Lasso, SGDRegressor, BaggingRegressor, ExtraTreesRegressor,
+                                    Ridge, ARDRegression, RANSACRegressor, LassoLarsIC)
+            self._models = deepcopy(self._models_lst)
+        self.freeze_models = freeze_models
+        if self.freeze_models:
+            self.n_models = n_models
+            self.n_iter_models = n_iter_models
         X_train = KNNImputer(weights='distance',
                              n_neighbors=10).fit_transform(deepcopy(X_train))
         self._y_mean = y_train.mean()
@@ -179,7 +208,7 @@ class VGBRegressor(BaseEstimator):
                     preds[f'p{i}'] = residuals.sum(axis=1) + min_model.predict(
                         X_train) * self.learning_rate
                     residuals[f'r{i}'] = preds['yt'] - preds[f'p{i}']
-                    if i % 3 == 0:
+                    if i % n_warm == 0:
                         X_train[f"r{i}"] = residuals[f'r{i}'].copy()
                     try:
                         errors.append(mean_squared_error(
@@ -191,11 +220,30 @@ class VGBRegressor(BaseEstimator):
                             df['yt'], df[f"p{i - 1}"]))
                     self._ensemble.append(min_model)
             else:
+                freeze_models_lst = []
                 for i in prange(1, self.n_estimators + 1):
                     y = residuals[f'r{i - 1}']
                     results = self._get_results(X_train, y)
-                    min_loss = min(results, key=lambda x: x.get(
-                        "loss", float('inf')))["loss"]  # https://stackoverflow.com/a/19619294
+                    if n_random_models > 0:
+                        self._models = tuple(
+                            sample(self._models_lst, n_random_models))
+                    elif self.freeze_models:
+                        if self.n_iter_models > -1:
+                            freeze_models_lst.append([i.get("model") for i in sorted(results, key=lambda x: x.get(
+                                "loss", float('inf')))][:n_models])
+                            self.n_iter_models -= 1
+                        else:
+                            model_lst = sorted(dict(Counter(i for sub in freeze_models_lst for i in set(
+                                sub))).items(), key=lambda ele: ele[1], reverse=True)
+                            # return model_lst
+                            self._models = tuple(type(i[0]) for i in model_lst)[
+                                :n_models]
+                            # return self._models
+                    try:
+                        min_loss = min(results, key=lambda x: x.get(
+                            "loss", float('inf')))["loss"]  # https://stackoverflow.com/a/19619294
+                    except Exception:
+                        continue
                     min_model = [i['model']
                                  for i in results if min_loss >= i['loss']][0]
                     preds[f'p{i}'] = residuals.sum(axis=1) + min_model.predict(
@@ -214,14 +262,17 @@ class VGBRegressor(BaseEstimator):
         self._ensemble, errors = self._ensemble[:
                                                 min_error_i], errors[:min_error_i]
         residuals = residuals[:len(errors)]
-        return self._ensemble, (residuals, errors)
+        if return_vals:
+            return self._ensemble, (residuals, errors)
+        return
 
     def predict(self, X_test):
-        """_summary_
+        """
         Args:
-            X_test (_type_): _description_
+            X_test (iterable)
+
         Returns:
-            _type_: _description_
+            numpy.array: predictions
         """
         try:
             val = self._ensemble[0]
@@ -250,39 +301,42 @@ class VGBRegressor(BaseEstimator):
 
 
 class VGBClassifier(BaseEstimator):
-    """_summary_
-    Args:
-        object (_type_): _description_
+    """A Variational Gradient Boosting Classifier
     """
 
     def __init__(self):
-        """ Initialize VGBRegressor Object
+        """ Initialize VGBClassifier Object
         """
+        super().__init__()
         self._ensemble = []
 
     def _metrics(self, vt, vp, model, time=None):
-        """_summary_
+        """get loss metrics of a model
+
         Args:
-            vt (_type_): _description_
-            vp (_type_): _description_
-            model (_type_): _description_
-            time (_type_, optional): _description_. Defaults to None.
+            vt (iterable): validation true values
+            vp (iterable): validation pred values
+            model (object): any model with fit and predict method
+            time (float, optional): execution time of the model. Defaults to None.
+
         Returns:
-            _type_: _description_
+            dict['model', 'time', 'loss']
         """
         if self.custom_loss_metrics:
             return {'model': model, 'time': time, 'loss': self.custom_loss_metrics(vt, vp)}
         return {"model": model, "time": time, "loss": mean_squared_error(vt, vp)}
 
     def _create_model(self, X, y, model_name, time_it: bool = False):
-        """_summary_
+        """fit a model instance
+
         Args:
-            X (_type_): _description_
-            y (_type_): _description_
-            model_name (_type_): _description_
-            time_it (bool, optional): _description_. Defaults to False.
+            X (iterable)
+            y (iterable)
+            model_name (object): any model object with fit and predict methods
+            time_it (bool, optional): measure execution time. Defaults to False.
+
         Returns:
-            _type_: _description_
+            tuple(model, time=None)
         """
         model = model_name()
         if time_it:
@@ -293,11 +347,13 @@ class VGBClassifier(BaseEstimator):
         return (model.fit(X, y), None)
 
     def _get_metrics(self, model_name):
-        """_summary_
+        """a helper fuction, combines self._create_model and self._metrics
+
         Args:
-            model_name (_type_): _description_
+            model_name (object): any model with fit and predict methods
+
         Returns:
-            _type_: _description_
+            self._metrics
         """
         try:
             Xt, Xv, yt, yv = train_test_split(self._X, self._y)
@@ -309,12 +365,14 @@ class VGBClassifier(BaseEstimator):
             return None
 
     def _get_results(self, X, y) -> list:
-        """_summary_
+        """Use multi-threading to return all results
+
         Args:
-            X (_type_): _description_
-            y (_type_): _description_
+            X (iterable)
+            y (iterable)
+
         Returns:
-            list: _description_
+            list[dict['model', 'time', 'loss']]
         """
         results = []
         # self._X = self._minimax.fit_transform(self._robust.fit_transform(
@@ -338,22 +396,38 @@ class VGBClassifier(BaseEstimator):
         complexity: bool = False,
         light: bool = True,
         custom_loss_metrics: object = False,
+        freeze_models: bool = False,
+        n_models: int = 5,
+        n_iter_models: int = 5,
+        n_warm: int = None,
+        n_random_models: int = 0,
+        return_vals: bool = True,
     ):
-        """_summary_
+        """fit VGBoost model
+
         Args:
-            X_train (_type_): _description_
-            y_train (_type_): _description_
-            early_stopping (bool, optional): _description_. Defaults to False.
-            early_stopping_min_delta (float, optional): _description_. Defaults to 0.001.
-            early_stopping_patience (int, optional): _description_. Defaults to 10.
-            custom_models (list, optional): _description_. Defaults to None.
-            learning_rate (float, optional): _description_. Defaults to 0.05.
-            n_estimators (int, optional): _description_. Defaults to 100.
-            warm_start (bool, optional): _description_. Defaults to False.
-            complexity (bool, optional): _description_. Defaults to False.
+            X_train (iterable)
+            y_train (iterbale)
+            early_stopping (bool, optional): Defaults to False.
+            early_stopping_min_delta (float, optional): Defaults to 0.001.
+            early_stopping_patience (int, optional): Defaults to 10.
+            custom_models (tuple, optional): tuple of custom models with fit and predict methods. Defaults to None.
+            learning_rate (float, optional): Defaults to 0.05.
+            n_estimators (int, optional): Defaults to 100.
+            warm_start (bool, optional): Defaults to False.
+            complexity (bool, optional): trains more models but has greater time complexity. Defaults to False.
+            light (bool, optional): trains less models. Defaults to True.
             custom_loss_metrics (object, optional): _description_. Defaults to False.
+            freeze_models (bool, optional): test only a selected models. Defaults to False.
+            n_models (int, optional): Applicable for freeze_models, number of models to train. Defaults to 5.
+            n_iter_models (int, optional): Applicable for freeze_models, number of iterations before finalizing the models. Defaults to 5.
+            n_warm (int, optional): Applicable for warm start, number of iterarions to store. Defaults to None.
+            n_random_models (int, optional): train on a random number of models. Defaults to 0.
+            return_vals (bool, optional): returns analytics. Defaults to True.
+
         Returns:
-            _type_: _description_
+            tuple[final ensemble sequence, mean absolute error of each layer, residual value of each layer],
+            None
         """
         if custom_models:
             self._models = custom_models
@@ -364,20 +438,26 @@ class VGBClassifier(BaseEstimator):
         self.early_stopping_min_delta = early_stopping_min_delta
         self.early_stopping_patience = early_stopping_patience
         if custom_models:
-            self._models = custom_models
+
+            self._models_lst = custom_models
         else:
             if complexity:
-                self._models = (DecisionTreeRegressor, LinearRegression, BayesianRidge, KNeighborsRegressor, HistGradientBoostingRegressor,
-                                ElasticNet, LassoLars, Lasso, GradientBoostingRegressor, ExtraTreesRegressor,
-                                BaggingRegressor, NuSVR, XGBRegressor, SGDRegressor, KernelRidge, MLPRegressor, LGBMRegressor,
-                                Ridge, ARDRegression, RANSACRegressor, HuberRegressor, TheilSenRegressor, LassoLarsIC)
+                self._models_lst = (DecisionTreeRegressor, LinearRegression, BayesianRidge, KNeighborsRegressor, HistGradientBoostingRegressor,
+                                    ElasticNet, LassoLars, Lasso, GradientBoostingRegressor, ExtraTreesRegressor, SVC,
+                                    BaggingRegressor, NuSVR, XGBRegressor, SGDRegressor, KernelRidge, MLPRegressor, LGBMRegressor,
+                                    Ridge, ARDRegression, RANSACRegressor, HuberRegressor, TheilSenRegressor, LassoLarsIC)
             elif light:
-                self._models = (LGBMRegressor, ExtraTreesRegressor,
-                                BaggingRegressor, RANSACRegressor, LassoLarsIC, BayesianRidge)
+                self._models_lst = (LGBMRegressor, ExtraTreesRegressor,
+                                    BaggingRegressor, RANSACRegressor, LassoLarsIC, BayesianRidge)
             else:
-                self._models = (DecisionTreeRegressor, LinearRegression, BayesianRidge, KNeighborsRegressor, LGBMRegressor,
-                                ElasticNet, LassoLars, Lasso, SGDRegressor, BaggingRegressor, ExtraTreesRegressor,
-                                Ridge, ARDRegression, RANSACRegressor, LassoLarsIC)
+                self._models_lst = (DecisionTreeRegressor, LinearRegression, BayesianRidge, KNeighborsRegressor, LGBMRegressor,
+                                    ElasticNet, LassoLars, Lasso, SGDRegressor, BaggingRegressor, ExtraTreesRegressor,
+                                    Ridge, ARDRegression, RANSACRegressor, LassoLarsIC)
+            self._models = deepcopy(self._models_lst)
+        self.freeze_models = freeze_models
+        if self.freeze_models:
+            self.n_models = n_models
+            self.n_iter_models = n_iter_models
         X_train = KNNImputer(weights='distance',
                              n_neighbors=10).fit_transform(deepcopy(X_train))
         self._y_mean = y_train.mean()
@@ -405,7 +485,7 @@ class VGBClassifier(BaseEstimator):
                     preds[f'p{i}'] = residuals.sum(axis=1) + min_model.predict(
                         X_train) * self.learning_rate
                     residuals[f'r{i}'] = preds['yt'] - preds[f'p{i}']
-                    if i % 3 == 0:
+                    if i % n_warm == 0:
                         X_train[f"r{i}"] = residuals[f'r{i}'].copy()
                     try:
                         errors.append(mean_squared_error(
@@ -417,11 +497,30 @@ class VGBClassifier(BaseEstimator):
                             df['yt'], df[f"p{i - 1}"]))
                     self._ensemble.append(min_model)
             else:
+                freeze_models_lst = []
                 for i in prange(1, self.n_estimators + 1):
                     y = residuals[f'r{i - 1}']
                     results = self._get_results(X_train, y)
-                    min_loss = min(results, key=lambda x: x.get(
-                        "loss", float('inf')))["loss"]  # https://stackoverflow.com/a/19619294
+                    if n_random_models > 0:
+                        self._models = tuple(
+                            sample(self._models_lst, n_random_models))
+                    elif self.freeze_models:
+                        if self.n_iter_models > -1:
+                            freeze_models_lst.append([i.get("model") for i in sorted(results, key=lambda x: x.get(
+                                "loss", float('inf')))][:n_models])
+                            self.n_iter_models -= 1
+                        else:
+                            model_lst = sorted(dict(Counter(i for sub in freeze_models_lst for i in set(
+                                sub))).items(), key=lambda ele: ele[1], reverse=True)
+                            # return model_lst
+                            self._models = tuple(type(i[0]) for i in model_lst)[
+                                :n_models]
+                            # return self._models
+                    try:
+                        min_loss = min(results, key=lambda x: x.get(
+                            "loss", float('inf')))["loss"]  # https://stackoverflow.com/a/19619294
+                    except Exception:
+                        continue
                     min_model = [i['model']
                                  for i in results if min_loss >= i['loss']][0]
                     preds[f'p{i}'] = residuals.sum(axis=1) + min_model.predict(
@@ -440,14 +539,16 @@ class VGBClassifier(BaseEstimator):
         self._ensemble, errors = self._ensemble[:
                                                 min_error_i], errors[:min_error_i]
         residuals = residuals[:len(errors)]
-        return self._ensemble, (residuals, errors)
+        if return_vals:
+            return self._ensemble, (residuals, errors)
 
     def predict(self, X_test):
-        """_summary_
+        """
         Args:
-            X_test (_type_): _description_
+            X_test (iterable)
+
         Returns:
-            _type_: _description_
+            numpy.array: predictions
         """
         try:
             val = self._ensemble[0]
@@ -459,6 +560,7 @@ class VGBClassifier(BaseEstimator):
         for i in prange(len(self._ensemble)):
             preds[f"p{i}"] = self._ensemble[i].predict(X_test)
         preds_ = preds.sum(axis=1)
+
         def quantize(x):
             if x > 0.5:
                 return 1
