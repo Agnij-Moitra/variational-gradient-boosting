@@ -81,9 +81,9 @@ class VGBRegressor(BaseEstimator):
         try:
             Xt, Xv, yt, yv = train_test_split(self._X, self._y)
             results = self._create_model(Xt, yt, model_name, time_it=False)
-            model, time = results[0], results[1]
+            model = results[0]
             return self._metrics(yv,
-                                 model.predict(Xv), model, time)
+                                 model.predict(Xv), model, results[1])
         except Exception:
             return None
 
@@ -161,7 +161,6 @@ class VGBRegressor(BaseEstimator):
         self.early_stopping_min_delta = early_stopping_min_delta
         self.early_stopping_patience = early_stopping_patience
         if custom_models:
-
             self._models_lst = custom_models
         else:
             if complexity:
