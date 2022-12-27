@@ -1,15 +1,16 @@
+#%%
 import numpy as np
 from collections import Counter
 from pandas import DataFrame, concat
-from numba import prange
 from concurrent.futures import ThreadPoolExecutor
 # Scikit-learn: Machine Learning in Python, Pedregosa et al., JMLR 12, pp. 2825-2830, 2011
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import RobustScaler, MinMaxScaler
 from sklearn.metrics import mean_squared_error, r2_score, f1_score
+from sklearn.utils.validation import check_X_y, check_array, check_is_fitted
 from sklearn.ensemble import GradientBoostingRegressor, HistGradientBoostingRegressor, BaggingRegressor, ExtraTreesRegressor
 from sklearn.svm import NuSVR, SVC
-from sklearn.base import BaseEstimator
+from sklearn.base import BaseEstimator, ClassifierMixin
 from lightgbm import LGBMRegressor
 from sklearn.neural_network import MLPRegressor
 from sklearn.linear_model import LinearRegression, BayesianRidge, ElasticNet, SGDRegressor, LassoLars, Lasso, Ridge, ARDRegression, RANSACRegressor, HuberRegressor, TheilSenRegressor, LassoLarsIC
@@ -30,8 +31,6 @@ class VGBRegressor(BaseEstimator):
     def __init__(self):
         """ Initialize VGBRegressor Object
         """
-        super().__init__()
-        self._ensemble = []
 
     def _metrics(self, vt, vp, model, time=None):
         """get loss metrics of a model
@@ -108,7 +107,7 @@ class VGBRegressor(BaseEstimator):
         return results
 
     def fit(
-        self, X_train, y_train,
+        self, X, y,
         early_stopping: bool = False,
         early_stopping_min_delta: float = 0.001,
         early_stopping_patience: int = 10,
@@ -129,8 +128,8 @@ class VGBRegressor(BaseEstimator):
         """fit VGBoost model
 
         Args:
-            X_train (iterable)
-            y_train (iterbale)
+            X (iterable)
+            y (iterbale)
             early_stopping (bool, optional): Defaults to False.
             early_stopping_min_delta (float, optional): Defaults to 0.001.
             early_stopping_patience (int, optional): Defaults to 10.
@@ -152,6 +151,8 @@ class VGBRegressor(BaseEstimator):
             tuple[final ensemble sequence, mean absolute error of each layer, residual value of each layer],
             None
         """
+        X, y = check_X_y(X, y)
+        self._ensemble = []
         if custom_models:
             self._models = custom_models
         self.custom_loss_metrics = custom_loss_metrics
@@ -180,9 +181,9 @@ class VGBRegressor(BaseEstimator):
         if self.freeze_models:
             self.n_models = n_models
             self.n_iter_models = n_iter_models
-        X_train = KNNImputer(weights='distance',
-                             n_neighbors=10).fit_transform(deepcopy(X_train))
-        self._y_mean = y_train.mean()
+        X = KNNImputer(weights='distance',
+                             n_neighbors=10).fit_transform(deepcopy(X))
+        self._y_mean = y.mean()
         # base model: mean
         # computer residuals: y - y hat
         # for n_estimators: a) y = prev residuals && residuals * learning rate
@@ -191,24 +192,24 @@ class VGBRegressor(BaseEstimator):
         # ada boost and adaptive scaling for learning rates
 
         preds = DataFrame(
-            data={'yt': y_train, 'p0': np.full((len(y_train)), y_train - self._y_mean)})
+            data={'yt': y, 'p0': np.full((len(y)), y - self._y_mean)})
         residuals = DataFrame(
-            data={'r0': y_train - self._y_mean})
+            data={'r0': y - self._y_mean})
         errors = []
         if not early_stopping:
             if warm_start:
-                for i in prange(1, self.n_estimators + 1):
+                for i in range(1, self.n_estimators + 1):
                     y = residuals[f'r{i - 1}']
-                    results = self._get_results(X_train, y)
+                    results = self._get_results(X, y)
                     min_loss = min(results, key=lambda x: x.get(
                         "loss", float('inf')))["loss"]  # https://stackoverflow.com/a/19619294
                     min_model = [i['model']
                                  for i in results if min_loss >= i['loss']][0]
                     preds[f'p{i}'] = residuals.sum(axis=1) + min_model.predict(
-                        X_train) * self.learning_rate
+                        X) * self.learning_rate
                     residuals[f'r{i}'] = preds['yt'] - preds[f'p{i}']
                     if i % n_warm == 0:
-                        X_train[f"r{i}"] = residuals[f'r{i}'].copy()
+                        X[f"r{i}"] = residuals[f'r{i}'].copy()
                     try:
                         errors.append(mean_squared_error(
                             preds['yt'], preds[f'p{i}']))
@@ -220,9 +221,9 @@ class VGBRegressor(BaseEstimator):
                     self._ensemble.append(min_model)
             else:
                 freeze_models_lst = []
-                for i in prange(1, self.n_estimators + 1):
+                for i in range(1, self.n_estimators + 1):
                     y = residuals[f'r{i - 1}']
-                    results = self._get_results(X_train, y)
+                    results = self._get_results(X, y)
                     if n_random_models > 0:
                         self._models = tuple(
                             sample(self._models_lst, n_random_models))
@@ -246,7 +247,7 @@ class VGBRegressor(BaseEstimator):
                     min_model = [i['model']
                                  for i in results if min_loss >= i['loss']][0]
                     preds[f'p{i}'] = residuals.sum(axis=1) + min_model.predict(
-                        X_train) * self.learning_rate
+                        X) * self.learning_rate
                     residuals[f'r{i}'] = preds['yt'] - preds[f'p{i}']
                     errors.append(mean_squared_error(
                         preds['yt'], preds[f'p{i}']))
@@ -254,16 +255,17 @@ class VGBRegressor(BaseEstimator):
                     if errors[i - 1] == 0:
                         break
         else:
-            return "TODO"
+            return self
         min_error = min(errors)
-        min_error_i = [i for i in prange(
+        min_error_i = [i for i in range(
             len(errors)) if errors[i] == min_error][0]
         self._ensemble, errors = self._ensemble[:
                                                 min_error_i], errors[:min_error_i]
         residuals = residuals[:len(errors)]
         if return_vals:
-            return self._ensemble, (residuals, errors)
-        return
+            self.residuls = residuals
+            self.errors = errors
+        return self
 
     def predict(self, X_test):
         """
@@ -273,41 +275,35 @@ class VGBRegressor(BaseEstimator):
         Returns:
             numpy.array: predictions
         """
-        try:
-            val = self._ensemble[0]
-        except Exception:
-            return "Please train the model first"
+        check_is_fitted(self)
+        check_array(X_test)
         # X_test = self._robust.transform(self._minimax.transform(deepcopy(X_test)))
         preds = DataFrame(
             data={'p0': np.full((len(X_test)), self._y_mean)})
-        for i in prange(len(self._ensemble)):
+        for i in range(len(self._ensemble)):
             preds[f"p{i}"] = self._ensemble[i].predict(X_test)
         preds_ = preds.sum(axis=1)
         return preds_
 
-    def score(self, X_test, y_true):
-        """
-        Args:
-            X_test (Iterable)
-            y_true (Iterable)
-        Returns:
-            float: R2 Score for y_true and y_predicted
-        """
-        return r2_score(y_true, self.predict(X_test))
-
-    def get_params(self):
-        return self.__dict__
+    # def score(self, X_test, y_true):
+    #     """
+    #     Args:
+    #         X_test (Iterable)
+    #         y_true (Iterable)
+    #     Returns:
+    #         float: R2 Score for y_true and y_predicted
+    #     """
+    #     return r2_score(y_true, self.predict(X_test))
 
 
-class VGBClassifier(BaseEstimator):
+class VGBClassifier(BaseEstimator , ClassifierMixin):
     """A Variational Gradient Boosting Classifier
     """
 
     def __init__(self):
         """ Initialize VGBClassifier Object
         """
-        super().__init__()
-        self._ensemble = []
+        
 
     def _metrics(self, vt, vp, model, time=None):
         """get loss metrics of a model
@@ -384,7 +380,7 @@ class VGBClassifier(BaseEstimator):
         return results
 
     def fit(
-        self, X_train, y_train,
+        self, X, y,
         early_stopping: bool = False,
         early_stopping_min_delta: float = 0.001,
         early_stopping_patience: int = 10,
@@ -405,8 +401,8 @@ class VGBClassifier(BaseEstimator):
         """fit VGBoost model
 
         Args:
-            X_train (iterable)
-            y_train (iterbale)
+            X (iterable)
+            y (iterbale)
             early_stopping (bool, optional): Defaults to False.
             early_stopping_min_delta (float, optional): Defaults to 0.001.
             early_stopping_patience (int, optional): Defaults to 10.
@@ -428,6 +424,8 @@ class VGBClassifier(BaseEstimator):
             tuple[final ensemble sequence, mean absolute error of each layer, residual value of each layer],
             None
         """
+        X, y = check_X_y(X, y)
+        self.n_features_in_ = X.shape[1]
         if custom_models:
             self._models = custom_models
         self.custom_loss_metrics = custom_loss_metrics
@@ -457,35 +455,35 @@ class VGBClassifier(BaseEstimator):
         if self.freeze_models:
             self.n_models = n_models
             self.n_iter_models = n_iter_models
-        X_train = KNNImputer(weights='distance',
-                             n_neighbors=10).fit_transform(deepcopy(X_train))
-        self._y_mean = y_train.mean()
+        X = KNNImputer(weights='distance',
+                             n_neighbors=10).fit_transform(deepcopy(X))
+        self._y_mean = y.mean()
         # base model: mean
         # computer residuals: y - y hat
         # for n_estimators: a) y = prev residuals && residuals * learning rate
         # add early stopping
         # restore best weights
         # ada boost and adaptive scaling for learning rates
-
+        self._ensemble = []
         preds = DataFrame(
-            data={'yt': y_train, 'p0': np.full((len(y_train)), y_train - self._y_mean)})
+            data={'yt': y, 'p0': np.full((len(y)), y - self._y_mean)})
         residuals = DataFrame(
-            data={'r0': y_train - self._y_mean})
+            data={'r0': y - self._y_mean})
         errors = []
         if not early_stopping:
             if warm_start:
-                for i in prange(1, self.n_estimators + 1):
+                for i in range(1, self.n_estimators + 1):
                     y = residuals[f'r{i - 1}']
-                    results = self._get_results(X_train, y)
+                    results = self._get_results(X, y)
                     min_loss = min(results, key=lambda x: x.get(
                         "loss", float('inf')))["loss"]  # https://stackoverflow.com/a/19619294
                     min_model = [i['model']
                                  for i in results if min_loss >= i['loss']][0]
                     preds[f'p{i}'] = residuals.sum(axis=1) + min_model.predict(
-                        X_train) * self.learning_rate
+                        X) * self.learning_rate
                     residuals[f'r{i}'] = preds['yt'] - preds[f'p{i}']
                     if i % n_warm == 0:
-                        X_train[f"r{i}"] = residuals[f'r{i}'].copy()
+                        X[f"r{i}"] = residuals[f'r{i}'].copy()
                     try:
                         errors.append(mean_squared_error(
                             preds['yt'], preds[f'p{i}']))
@@ -497,9 +495,9 @@ class VGBClassifier(BaseEstimator):
                     self._ensemble.append(min_model)
             else:
                 freeze_models_lst = []
-                for i in prange(1, self.n_estimators + 1):
+                for i in range(1, self.n_estimators + 1):
                     y = residuals[f'r{i - 1}']
-                    results = self._get_results(X_train, y)
+                    results = self._get_results(X, y)
                     if n_random_models > 0:
                         self._models = tuple(
                             sample(self._models_lst, n_random_models))
@@ -523,7 +521,7 @@ class VGBClassifier(BaseEstimator):
                     min_model = [i['model']
                                  for i in results if min_loss >= i['loss']][0]
                     preds[f'p{i}'] = residuals.sum(axis=1) + min_model.predict(
-                        X_train) * self.learning_rate
+                        X) * self.learning_rate
                     residuals[f'r{i}'] = preds['yt'] - preds[f'p{i}']
                     errors.append(mean_squared_error(
                         preds['yt'], preds[f'p{i}']))
@@ -531,15 +529,17 @@ class VGBClassifier(BaseEstimator):
                     if errors[i - 1] == 0:
                         break
         else:
-            return "TODO"
+            return self
         min_error = min(errors)
-        min_error_i = [i for i in prange(
+        min_error_i = [i for i in range(
             len(errors)) if errors[i] == min_error][0]
         self._ensemble, errors = self._ensemble[:
                                                 min_error_i], errors[:min_error_i]
         residuals = residuals[:len(errors)]
         if return_vals:
-            return self._ensemble, (residuals, errors)
+            self.residuls = residuals
+            self.errors = errors
+        return self
 
     def predict(self, X_test):
         """
@@ -549,14 +549,12 @@ class VGBClassifier(BaseEstimator):
         Returns:
             numpy.array: predictions
         """
-        try:
-            val = self._ensemble[0]
-        except Exception:
-            return "Please train the model first"
+        check_is_fitted(self)
+        check_array(X_test)
         # X_test = self._robust.transform(self._minimax.transform(deepcopy(X_test)))
         preds = DataFrame(
             data={'p0': np.full((len(X_test)), self._y_mean)})
-        for i in prange(len(self._ensemble)):
+        for i in range(len(self._ensemble)):
             preds[f"p{i}"] = self._ensemble[i].predict(X_test)
         preds_ = preds.sum(axis=1)
 
@@ -567,15 +565,33 @@ class VGBClassifier(BaseEstimator):
                 return 0
         return preds_.apply(quantize)
 
-    def score(self, X_test, y_true):
-        """
-        Args:
-            X_test (Iterable)
-            y_true (Iterable)
-        Returns:
-            float: R2 Score for y_true and y_predicted
-        """
-        return r2_score(y_true, self.predict(X_test))
+    # def score(self, X_test, y_true):
+    #     """
+    #     Args:
+    #         X_test (Iterable)
+    #         y_true (Iterable)
+    #     Returns:
+    #         float: R2 Score for y_true and y_predicted
+    #     """
+    #     return r2_score(y_true, self.predict(X_test))
 
-    def get_params(self):
-        return self.__dict__
+#%%
+class VGBMultiClass(BaseEstimator):
+    def __init__(self):
+        super().__init__()
+        self._ensemble = []
+        self.y_set = None
+        self.y_len = None
+        self.model_dict = dict()
+
+    
+
+    def fit(self, X, y):
+        self.y_set =  set(y)
+        self.y_len = len(self.y_set)
+        for i in self.y_set:
+            clf = VGBClassifier
+            self.model_dict[i] = clf
+        clf = VGBClassifier()
+        return clf
+# %%
