@@ -1,4 +1,4 @@
-#%%
+# %%
 import numpy as np
 from collections import Counter
 from pandas import DataFrame, concat
@@ -182,7 +182,7 @@ class VGBRegressor(BaseEstimator):
             self.n_models = n_models
             self.n_iter_models = n_iter_models
         X = KNNImputer(weights='distance',
-                             n_neighbors=10).fit_transform(deepcopy(X))
+                       n_neighbors=10).fit_transform(deepcopy(X))
         self._y_mean = y.mean()
         # base model: mean
         # computer residuals: y - y hat
@@ -276,7 +276,7 @@ class VGBRegressor(BaseEstimator):
             numpy.array: predictions
         """
         check_is_fitted(self)
-        check_array(X_test)
+        X_test = check_array(X_test)
         # X_test = self._robust.transform(self._minimax.transform(deepcopy(X_test)))
         preds = DataFrame(
             data={'p0': np.full((len(X_test)), self._y_mean)})
@@ -296,14 +296,13 @@ class VGBRegressor(BaseEstimator):
     #     return r2_score(y_true, self.predict(X_test))
 
 
-class VGBClassifier(BaseEstimator , ClassifierMixin):
+class VGBClassifier(BaseEstimator, ClassifierMixin):
     """A Variational Gradient Boosting Classifier
     """
 
     def __init__(self):
         """ Initialize VGBClassifier Object
         """
-        
 
     def _metrics(self, vt, vp, model, time=None):
         """get loss metrics of a model
@@ -456,7 +455,7 @@ class VGBClassifier(BaseEstimator , ClassifierMixin):
             self.n_models = n_models
             self.n_iter_models = n_iter_models
         X = KNNImputer(weights='distance',
-                             n_neighbors=10).fit_transform(deepcopy(X))
+                       n_neighbors=10).fit_transform(deepcopy(X))
         self._y_mean = y.mean()
         # base model: mean
         # computer residuals: y - y hat
@@ -550,7 +549,7 @@ class VGBClassifier(BaseEstimator , ClassifierMixin):
             numpy.array: predictions
         """
         check_is_fitted(self)
-        check_array(X_test)
+        X_test = check_array(X_test)
         # X_test = self._robust.transform(self._minimax.transform(deepcopy(X_test)))
         preds = DataFrame(
             data={'p0': np.full((len(X_test)), self._y_mean)})
@@ -575,7 +574,9 @@ class VGBClassifier(BaseEstimator , ClassifierMixin):
     #     """
     #     return r2_score(y_true, self.predict(X_test))
 
-#%%
+# %%
+
+
 class VGBMultiClass(BaseEstimator):
     def __init__(self):
         super().__init__()
@@ -584,10 +585,8 @@ class VGBMultiClass(BaseEstimator):
         self.y_len = None
         self.model_dict = dict()
 
-    
-
     def fit(self, X, y):
-        self.y_set =  set(y)
+        self.y_set = set(y)
         self.y_len = len(self.y_set)
         for i in self.y_set:
             clf = VGBClassifier
