@@ -275,7 +275,7 @@ class VGBRegressor(BaseEstimator, RegressorMixin):
         Returns:
             numpy.array: predictions
         """
-        check_is_fitted(self)
+        # check_is_fitted(self)
         X_test = check_array(X_test)
         # X_test = self._robust.transform(self._minimax.transform(deepcopy(X_test)))
         preds = DataFrame(
@@ -388,13 +388,13 @@ class VGBClassifier(BaseEstimator, ClassifierMixin):
         n_estimators: int = 100,
         warm_start: bool = False,
         complexity: bool = False,
-        light: bool = True,
+        light: bool = False,
         custom_loss_metrics: object = False,
         freeze_models: bool = False,
         n_models: int = 5,
         n_iter_models: int = 5,
         n_warm: int = None,
-        n_random_models: int = 0,
+        n_random_models: int = 7,
         return_vals: bool = True,
     ):
         """fit VGBoost model
