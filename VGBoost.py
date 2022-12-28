@@ -10,7 +10,7 @@ from sklearn.metrics import mean_squared_error, r2_score, f1_score
 from sklearn.utils.validation import check_X_y, check_array, check_is_fitted
 from sklearn.ensemble import GradientBoostingRegressor, HistGradientBoostingRegressor, BaggingRegressor, ExtraTreesRegressor
 from sklearn.svm import NuSVR, SVC
-from sklearn.base import BaseEstimator, ClassifierMixin
+from sklearn.base import BaseEstimator, ClassifierMixin, RegressorMixin
 from lightgbm import LGBMRegressor
 from sklearn.neural_network import MLPRegressor
 from sklearn.linear_model import LinearRegression, BayesianRidge, ElasticNet, SGDRegressor, LassoLars, Lasso, Ridge, ARDRegression, RANSACRegressor, HuberRegressor, TheilSenRegressor, LassoLarsIC
@@ -24,7 +24,7 @@ from random import sample
 from copy import deepcopy
 
 
-class VGBRegressor(BaseEstimator):
+class VGBRegressor(BaseEstimator, RegressorMixin):
     """A Variational Gradient Boosting Regressor
     """
 
@@ -183,7 +183,7 @@ class VGBRegressor(BaseEstimator):
             self.n_iter_models = n_iter_models
         X = KNNImputer(weights='distance',
                        n_neighbors=10).fit_transform(deepcopy(X))
-        self._y_mean = y.mean()
+        self._y_mean = 0.5
         # base model: mean
         # computer residuals: y - y hat
         # for n_estimators: a) y = prev residuals && residuals * learning rate
@@ -424,6 +424,9 @@ class VGBClassifier(BaseEstimator, ClassifierMixin):
             None
         """
         X, y = check_X_y(X, y)
+        self.classes_ = np.array(set(y))
+        # self.n_classes_ = len(self.classes_)
+        self.len_X = X.shape[0]
         self.n_features_in_ = X.shape[1]
         if custom_models:
             self._models = custom_models
@@ -456,7 +459,7 @@ class VGBClassifier(BaseEstimator, ClassifierMixin):
             self.n_iter_models = n_iter_models
         X = KNNImputer(weights='distance',
                        n_neighbors=10).fit_transform(deepcopy(X))
-        self._y_mean = y.mean()
+        self._y_mean = 0.5
         # base model: mean
         # computer residuals: y - y hat
         # for n_estimators: a) y = prev residuals && residuals * learning rate
@@ -563,7 +566,25 @@ class VGBClassifier(BaseEstimator, ClassifierMixin):
             else:
                 return 0
         return preds_.apply(quantize)
-
+    
+    def predict_proba(self, X):
+    #     # crude data
+    #     # dont quantize
+    #     # https://datascience.stackexchange.com/q/22762
+    #     # https://www.youtube.com/watch?v=ZsM2z0pTbnk
+    #     # https://www.youtube.com/watch?v=yJK4sYclhg8
+        check_is_fitted(self)
+        X = check_array(X)
+        preds = DataFrame(
+            data={'p0': np.full((len(X)), self._y_mean)})
+        for i in range(len(self._ensemble)):
+            preds[f"p{i}"] = self._ensemble[i].predict(X)
+        preds_ = MinMaxScaler().fit_transform(preds.sum(axis=1).to_numpy().reshape(-1, 1))
+        preds_ = preds_.reshape(1, -1)[0]
+        proba = []
+        for i in preds_:
+            proba.append([1.0 - i, i])
+        return np.array(proba)
     # def score(self, X_test, y_true):
     #     """
     #     Args:
@@ -573,24 +594,4 @@ class VGBClassifier(BaseEstimator, ClassifierMixin):
     #         float: R2 Score for y_true and y_predicted
     #     """
     #     return r2_score(y_true, self.predict(X_test))
-
-# %%
-
-
-class VGBMultiClass(BaseEstimator):
-    def __init__(self):
-        super().__init__()
-        self._ensemble = []
-        self.y_set = None
-        self.y_len = None
-        self.model_dict = dict()
-
-    def fit(self, X, y):
-        self.y_set = set(y)
-        self.y_len = len(self.y_set)
-        for i in self.y_set:
-            clf = VGBClassifier
-            self.model_dict[i] = clf
-        clf = VGBClassifier()
-        return clf
 # %%
